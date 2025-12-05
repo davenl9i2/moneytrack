@@ -141,6 +141,51 @@ export default function Dashboard() {
     const netBalance = totalIncome - totalExpense;
 
     // Show error if LIFF failed
+    if (liffError) {
+        return (
+            <main className="container fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+                <div className="card" style={{ textAlign: 'center', padding: '40px', maxWidth: '400px' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '20px' }}>⚠️</div>
+                    <h2 style={{ marginBottom: '16px', color: '#FF5C5C' }}>登入失敗</h2>
+                    <p style={{ color: '#666', lineHeight: '1.6', marginBottom: '24px' }}>{liffError}</p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <button className="btn btn-primary" onClick={() => window.location.reload()}>
+                            重新整理
+                        </button>
+
+                        <a
+                            href="https://line.me/R/ti/p/@253gxwuc"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn"
+                            style={{
+                                background: '#06C755',
+                                color: 'white',
+                                textDecoration: 'none',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px',
+                                padding: '12px 24px',
+                                borderRadius: '12px',
+                                fontWeight: '600'
+                            }}
+                        >
+                            <span>📱</span>
+                            加入 LINE 好友
+                        </a>
+
+                        <p style={{ fontSize: '0.8rem', color: '#999', marginTop: '8px' }}>
+                            加入好友後，請從 LINE 聊天室開啟此連結
+                        </p>
+                    </div>
+                </div>
+            </main>
+        );
+    }
+
+    // Show loading while initializing
     if (!isLiffReady) {
         return (
             <main className="container fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
