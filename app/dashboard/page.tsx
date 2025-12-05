@@ -141,22 +141,6 @@ export default function Dashboard() {
     const netBalance = totalIncome - totalExpense;
 
     // Show error if LIFF failed
-    if (liffError) {
-        return (
-            <main className="container fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
-                <div className="card" style={{ textAlign: 'center', padding: '40px', maxWidth: '400px' }}>
-                    <div style={{ fontSize: '3rem', marginBottom: '20px' }}>⚠️</div>
-                    <h2 style={{ marginBottom: '16px', color: '#FF5C5C' }}>登入失敗</h2>
-                    <p style={{ color: '#666', lineHeight: '1.6' }}>{liffError}</p>
-                    <button className="btn btn-primary" style={{ marginTop: '24px' }} onClick={() => window.location.reload()}>
-                        重新整理
-                    </button>
-                </div>
-            </main>
-        );
-    }
-
-    // Show loading while initializing
     if (!isLiffReady) {
         return (
             <main className="container fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
