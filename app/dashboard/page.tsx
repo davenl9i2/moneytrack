@@ -537,7 +537,8 @@ export default function Dashboard() {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
                             {Array.from({ length: 12 }, (_, i) => {
                                 const date = new Date();
-                                date.setMonth(date.getMonth() - i);
+                                // 從 -6 到 +5 (過去6個月 + 當月 + 未來5個月)
+                                date.setMonth(date.getMonth() - 6 + i);
                                 const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                                 const isSelected = monthStr === selectedMonth;
 
