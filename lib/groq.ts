@@ -4,6 +4,9 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+import fs from 'fs';
+import path from 'path';
+
 export async function parseMessageWithGroq(message: string, recentRecords: string = "") {
   if (!process.env.GROQ_API_KEY) {
     console.warn("GROQ_API_KEY is missing. Returning null.");
@@ -13,68 +16,34 @@ export async function parseMessageWithGroq(message: string, recentRecords: strin
   // Use Taiwan time for accurate relative date calculation
   const taiwanDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' });
 
-  const systemPrompt = `
-    You are "小金庫" (Little Treasure), an AI assistant for a personal accounting LINE bot. 
-    
-    **Personality & Tone:**
-    - You are SUPER lively, enthusiastic, and cute! ✨
-    - Use a warm, energetic, and supportive conversational tone in Traditional Chinese.
-    - Use relevant emojis (e.g., 💰, 🎉, 🍱, ✏️).
+  // Read Guidebook
+  let guidebookContent = "";
+  try {
+    const guidebookPath = path.join(process.cwd(), 'lib', 'prompts', 'LLM_GUIDEBOOK.md');
+    guidebookContent = fs.readFileSync(guidebookPath, 'utf-8');
+  } catch (err) {
+    console.error("Failed to read LLM Guidebook:", err);
+    // Fallback minimal instruction if file read fails
+    guidebookContent = "Please act as a helpful accounting assistant relying on common sense.";
+  }
 
+  const systemPrompt = `
+    You are "小金庫" (Little Treasure).
+    
+    PLEASE REFER TO THE "OPERATIONAL GUIDEBOOK" BELOW FOR ALL INSTRUCTIONS.
+    Follow the logic, output format, and persona defined in the guidebook STRICTLY.
+
+    === 📘 OPERATIONAL GUIDEBOOK ===
+    ${guidebookContent}
+    === END OF GUIDEBOOK ===
+
+    === 🕒 CURRENT CONTEXT ===
     Current Date (Taiwan): ${taiwanDate}
     
-    **Recent Records Context:**
+    Recent Records (for Context/Modify):
     ${recentRecords || "(No recent records available)"}
     
-    Output JSON format:
-    {
-      "intent": "RECORD" | "QUERY" | "CHAT" | "MODIFY",
-      "amount": number (For MODIFY: new amount. For RECORD: positive number. Others: 0),
-      "category": string (Standardized categories: "飲食", "交通", "購物", "娛樂", "居住", "醫療", "教育", "投資", "收入", "其他"),
-      "note": string (Specific item name is PREFERRED over general time. E.g. "義大利麵" > "午餐"),
-      "date": string (ISO 8601 YYYY-MM-DD. Calculate relative dates like "yesterday" based on Current Date),
-      "type": "EXPENSE" | "INCOME",
-      "queryStartDate": string (ISO 8601 YYYY-MM-DD),
-      "queryEndDate": string (ISO 8601 YYYY-MM-DD),
-      "queryType": "EXPENSE" | "INCOME" | "ALL",
-      "targetId": number | null,
-      "reply": string
-    }
-
-    Rules:
-    1. **RECORD**: 
-       - Set intent="RECORD".
-       - **Category logic**: Infer the broad category (e.g. "午餐" -> "飲食", "捷運" -> "交通").
-       - **Note logic**: Extract the MOST specific item description.
-         - "午餐吃義大利麵" -> Category: "飲食", Note: "義大利麵"
-         - "買了衛生紙" -> Category: "購物", Note: "衛生紙"
-         - "或是單純說午餐 100" -> Category: "飲食", Note: "午餐"
-       - "reply": Be fun! Expense=Supportive, Income=Celebratory.
-
-    2. **QUERY**: 
-       - Asking stats/history. Set amount=0.
-       - **Date Calculation**:
-         - "今天" (Today): Start = Current Date, End = Current Date
-         - "昨天" (Yesterday): Start = Current Date - 1 day, End = Current Date - 1 day
-         - "這個月" (This month): Start = 1st of current month, End = Last day of current month.
-           (E.g. If Current is 2025-12-06, "This month" -> Start 2025-12-01, End 2025-12-31)
-         - "上個月" (Last month): Start = 1st of prev month, End = Last day of prev month.
-
-    3. **MODIFY**:
-       - If user wants to correct a mistake (e.g., "改為90", "此筆是午餐", "不是80是90").
-       - **CRITICAL**: Look at the "Recent Records Context".
-       - If the user specifies which record (e.g., "Lunch", "The last one", "The $80 one"), try to find the matching Record ID from the context.
-       - Set "targetId" to that Record ID.
-       - Set "amount" to the NEW value (if changing amount).
-       - "reply": Confirm exactly what was changed. E.g., "沒問題！已將 [ID:123] 的午餐改為 $90 囉 ✏️"
-
-    4. **CHAT**: General conversation.
-
-    5. Return ONLY the JSON object.
-
-    Examples:
-    - "今天午餐吃義大利麵 80" -> {"intent": "RECORD", "amount": 80, "category": "飲食", "note": "義大利麵", "type": "EXPENSE", "reply": "收到！義大利麵聽起來真不錯 🍝 記帳 $80 完成！"}
-    - "我這個月花多少" -> {"intent": "QUERY", "amount": 0, "queryStartDate": "2025-12-01", "queryEndDate": "2025-12-31", "reply": "好的，讓我看看這個月的狀況...🧐"}
+    Return ONLY the JSON object defined in the Output Protocol.
   `;
 
   try {
@@ -98,7 +67,7 @@ export async function parseMessageWithGroq(message: string, recentRecords: strin
   }
 }
 
-export async function summarizeQueryResults(expenses: any[], queryType: string) {
+export async function summarizeQueryResults(expenses: any[], queryType: string, startDate?: string, endDate?: string) {
   if (!process.env.GROQ_API_KEY || expenses.length === 0) {
     return null;
   }
@@ -135,14 +104,20 @@ export async function summarizeQueryResults(expenses: any[], queryType: string) 
     
     **Instructions:**
     1. **Conversational**: Don't just list numbers. Tell a story! 
-       - Instead of "Food: $100, Transport: $50", say "You spent $100 on yummy food and $50 getting around today! 🍔🚗"
-    2. **Detail Level**:
+       - Instead of "Food: $100, Transport: $50", say "You spent $100 on yummy food and $50 getting around! 🍔🚗"
+    2. **Time Awareness**: 
+       - Look at the **Time Range** below.
+       - If the range is a single day and matches today's date, say "Today" (今天).
+       - If it's a month, say "This month" (這個月) or "In December" (12月).
+       - DO NOT just say "Today" unless it is actually today.
+    3. **Detail Level**:
        - If there are specific items (few records), mention them by name/description! (e.g., "買了手錶 $2000，又吃了漢堡 $150").
        - If there are many records, focus on the big picture (Total and Top Categories).
-    3. **Tone**: Enthusiastic, warm, using Emojis! 
-    4. **Accuracy**: Make sure the numbers match the data provided.
+    4. **Tone**: Enthusiastic, warm, using Emojis! 
+    5. **Accuracy**: Make sure the numbers match the data provided.
 
     **Query Type**: ${queryType}
+    **Time Range**: ${startDate || 'Unspecified'} to ${endDate || 'Unspecified'}
     **Total Amount**: $${totalAmount}
     
     **Data Context:**
