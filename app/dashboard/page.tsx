@@ -104,10 +104,16 @@ export default function Dashboard() {
 
     const handleSave = async (data: any) => {
         try {
+            const isEditing = !!editingExpense?.id;
+            const method = isEditing ? 'PUT' : 'POST';
+            const body = isEditing ? data : { ...data, userId };
+
             await fetch('/api/expenses', {
-                method: 'POST',
-                body: JSON.stringify({ ...data, userId })
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
             });
+
             setIsFormOpen(false);
             setEditingExpense(undefined);
             fetchExpenses();
@@ -259,7 +265,22 @@ export default function Dashboard() {
                         {filteredExpenses.map(expense => (
                             <div key={expense.id}
                                 onClick={() => { setEditingExpense(expense); setIsFormOpen(true); }}
-                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', paddingBottom: '16px', borderBottom: '1px dashed #F3EFE0' }}>
+                                style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    cursor: 'pointer',
+                                    paddingBottom: '16px',
+                                    borderBottom: '1px dashed #F3EFE0',
+                                    transition: 'background 0.2s',
+                                    padding: '12px',
+                                    borderRadius: '8px',
+                                    margin: '-12px',
+                                    marginBottom: '4px'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#F9F9F9'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                     <div style={{ fontWeight: '700', color: '#5A4A42', fontSize: '1rem' }}>

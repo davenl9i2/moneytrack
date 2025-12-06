@@ -58,6 +58,33 @@ export async function POST(request: Request) {
     }
 }
 
+export async function PUT(request: Request) {
+    try {
+        const body = await request.json();
+        const { id, amount, category, description, date, type } = body;
+
+        if (!id) {
+            return NextResponse.json({ error: 'ID is required for update' }, { status: 400 });
+        }
+
+        const expense = await prisma.expense.update({
+            where: { id: Number(id) },
+            data: {
+                amount: Number(amount),
+                category: category || 'Uncategorized',
+                description: description || '',
+                date: new Date(date),
+                type: type || 'EXPENSE',
+            },
+        });
+
+        return NextResponse.json(expense);
+    } catch (error) {
+        console.error(error);
+        return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
+    }
+}
+
 export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
