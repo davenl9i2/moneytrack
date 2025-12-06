@@ -6,9 +6,21 @@ import { parseMessageWithGroq } from '@/lib/groq';
 
 const channelSecret = process.env.LINE_CHANNEL_SECRET || '';
 
+// For testing - LINE will use POST, but GET helps verify the endpoint is reachable
+export async function GET() {
+    console.log('✅ GET request received - Webhook endpoint is reachable');
+    return NextResponse.json({
+        status: 'ok',
+        message: 'LINE Webhook endpoint is active',
+        timestamp: new Date().toISOString()
+    });
+}
+
 export async function POST(req: NextRequest) {
+    console.log('🔔 Webhook POST received at:', new Date().toISOString());
     const body = await req.text();
     const signature = req.headers.get('x-line-signature') || '';
+    console.log('📦 Body length:', body.length, 'Signature present:', !!signature);
 
     if (channelSecret && !validateSignature(body, channelSecret, signature)) {
         return NextResponse.json({ message: 'Invalid signature' }, { status: 401 });
