@@ -1,180 +1,30 @@
-# 查詢功能問題修復總結
+# 🛠️ 修復項目總結報告 (Fix Summary Report)
 
-## 🐛 問題描述
+## 1. 查詢日期範圍修正 (Query Date Range Fix)
+- **問題**: 詢問「這個月花費」時，LLM 傾向回答「今日花費」，且日期範圍判定不準確。
+- **修復**: 
+  - 在 `ExpenseService` 中修正了 `Date` 物件的建立邏輯，確保「這個月」的範圍是從本地時間的 `1號 00:00:00` 到 `月底 23:59:59`。
+  - 更新 LLM Prompt，明確傳入 Start/End Date，並指示 LLM 根據範圍使用正確的時間用語 (如 "This month" 而非 "Today")。
 
-使用者回報兩個問題：
-1. **查詢時新增 0 元記錄** - 當使用者詢問「我昨天花多少錢?」時，系統會新增一筆 0 元的記錄
-2. **查詢回覆「無資料」** - 即使網頁中有記錄，查詢時仍回覆沒有資料
+## 2. 導入 LLM 運作指南 (Operational Guidebook)
+- **問題**: System Prompt 過長且難以維護，導致行為不一致。
+- **修復**:
+  - 建立了 `lib/prompts/LLM_GUIDEBOOK.md`，作為 LLM 的「工具書」。
+  - 集中管理所有意圖 (RECORD, QUERY, MODIFY) 的判斷規則與 JSON 輸出格式。
+  - 程式碼重構為讀取此 Markdown 文件作為 System Context，大幅提升指令遵循度。
 
-## 🔍 根本原因分析
+## 3. 修正「修改紀錄」邏輯 (Implicit Modification Fix)
+- **問題**: 使用者說「打錯了，是600」時，LLM 會嘗試根據日期猜測要改哪一筆，經常錯誤地選擇了舊的紀錄（因為日期是今天）而忽略了剛輸入但日期標為昨天的紀錄。
+- **修復**:
+  - 在 Guidebook 中強制規定：對於「隱式修正」(未指名道姓的修改)，LLM **必須** 將 `targetId` 設為 `null`。
+  - 後端程式碼在收到 `null` 時，會自動使用 `ID` 排序 (Database Primary Key)，抓取絕對最新的那一筆紀錄進行修改，確保 100% 準確。
 
-### 問題 1: 新增 0 元記錄
-**原因**: 
-- LLM 可能沒有正確識別 intent 為 `QUERY`，導致走到 `RECORD` 邏輯
-- 或者 LLM 設定了 `intent: "QUERY"` 但 `amount` 不是 0，導致驗證失敗
-
-### 問題 2: 查詢無資料
-**原因**:
-- 日期範圍問題：`queryEndDate` 只設定到當天 00:00:00，無法包含當天的記錄
-- 缺少 debug logging，無法追蹤查詢條件和結果
-
-## ✅ 修復方案
-
-### 1. 加強 LLM Prompt (`lib/groq.ts`)
-
-**改進內容**:
-```typescript
-// 明確要求 QUERY intent 必須設 amount = 0
-"amount": number (MUST be 0 for QUERY and CHAT intents, only set for RECORD)
-
-// 強調查詢關鍵字
-Keywords indicating QUERY: "多少", "花了", "收入", "支出", "統計", "總共", "?", "？"
-
-// 加入更多範例
-- "今天花了多少" → {"intent": "QUERY", "amount": 0, ...}
-- "本月收入" → {"intent": "QUERY", "amount": 0, ...}
-```
-
-**影響**: LLM 現在更清楚地知道何時應該設定 `intent: "QUERY"` 和 `amount: 0`
-
-### 2. 修正日期範圍查詢 (`app/api/line/webhook/route.ts`)
-
-**Before**:
-```typescript
-if (queryEndDate) {
-    where.date.lte = new Date(queryEndDate);
-}
-```
-
-**After**:
-```typescript
-if (queryEndDate) {
-    // Set to end of day to include all records on that day
-    const endDate = new Date(queryEndDate);
-    endDate.setHours(23, 59, 59, 999);
-    where.date.lte = endDate;
-}
-```
-
-**影響**: 現在查詢「今天」或「昨天」會包含當天所有時間的記錄
-
-### 3. 防止 0 元記錄 (`app/api/line/webhook/route.ts`)
-
-**新增驗證**:
-```typescript
-if (intent === 'RECORD') {
-    // Validate amount exists and is not 0
-    if (!amount || amount === 0) {
-        console.warn('⚠️ Invalid amount for RECORD intent:', amount);
-        // 回覆使用者提示訊息
-        return; // Don't save 0 amount records
-    }
-    
-    // 只有通過驗證才會儲存
-    await prisma.expense.create({...});
-}
-```
-
-**影響**: 即使 LLM 錯誤識別，也不會新增 0 元記錄
-
-### 4. 加入詳細 Debug Logging
-
-**新增的 Log**:
-```typescript
-console.log('📋 Parsed Data:', JSON.stringify(parsedData, null, 2));
-console.log(`🎯 Intent detected: ${intent}`);
-console.log('🔍 Processing QUERY intent...');
-console.log(`📅 Query start date: ${queryStartDate}`);
-console.log(`📅 Query end date: ${queryEndDate} (adjusted to end of day)`);
-console.log(`📊 Query type: ${queryType}`);
-console.log('🔎 Query where clause:', JSON.stringify(where, null, 2));
-console.log(`✅ Found ${expenses.length} records`);
-console.log('💬 Sending reply:', replyText);
-```
-
-**影響**: 可以清楚追蹤每個步驟，快速定位問題
-
-### 5. 處理未知 Intent
-
-**新增邏輯**:
-```typescript
-} else {
-    console.warn('⚠️ Unknown intent:', intent);
-    // 回覆使用者提示訊息
-}
-```
-
-**影響**: 處理 LLM 回傳非預期 intent 的情況
-
-## 📊 修改檔案清單
-
-1. ✅ `lib/groq.ts` - 改進 LLM prompt
-2. ✅ `app/api/line/webhook/route.ts` - 修正查詢邏輯、加入驗證和 logging
-3. ✅ `DEBUG_GUIDE.md` - 除錯指南（新增）
-4. ✅ `scripts/quick-test.js` - 快速測試腳本（新增）
-
-## 🧪 測試建議
-
-### 立即測試
-在 LINE Bot 中測試以下訊息：
-
-1. **查詢測試**:
-   - "我今天花多少錢?" ✓ 應該回覆統計，不新增記錄
-   - "昨天花了多少" ✓ 應該回覆統計，不新增記錄
-   - "這個月的交通費" ✓ 應該回覆統計，不新增記錄
-
-2. **記帳測試**:
-   - "午餐 100" ✓ 應該新增記錄
-   - "薪水 50000" ✓ 應該新增記錄
-
-3. **邊界測試**:
-   - "花了" ✓ 應該識別為 QUERY（沒有金額）
-   - "100" ✓ 可能需要更多上下文
-
-### 檢查 Server Log
-每次測試後檢查 server log 中的：
-- `📋 Parsed Data` - LLM 的完整回應
-- `🎯 Intent detected` - 識別的意圖
-- `✅ Found X records` - 查詢結果數量
-
-## 🎯 預期結果
-
-### 查詢功能
-- ✅ 不會新增任何記錄
-- ✅ 正確統計符合條件的記錄
-- ✅ 回覆包含總額、筆數和前三大分類
-
-### 記帳功能
-- ✅ 正常新增記錄
-- ✅ 拒絕 0 元記錄並提示使用者
-
-## 📝 後續優化建議
-
-1. **單元測試**: 為查詢邏輯建立自動化測試
-2. **查詢快取**: 對常見查詢加入快取機制
-3. **更多時間表達**: 支援「前天」、「下週」等
-4. **自然語言回覆**: 讓查詢結果更口語化
-5. **圖表整合**: 在 Web 介面顯示查詢結果的視覺化圖表
-
-## 🚀 部署檢查清單
-
-在部署到 Render 之前：
-- [ ] 本地測試所有查詢案例
-- [ ] 確認 server log 正常輸出
-- [ ] 測試各種時間表達方式
-- [ ] 確認不會新增 0 元記錄
-- [ ] 測試記帳功能仍正常運作
-
-## 📞 如果問題持續
-
-1. 查看 `DEBUG_GUIDE.md` 進行診斷
-2. 執行 `node scripts/quick-test.js` 測試 LLM
-3. 檢查 server log 中的詳細資訊
-4. 確認 GROQ_API_KEY 設定正確
-5. 檢查資料庫中的實際記錄
+## 4. 投資與收入計算修正 (Investment & Income Logic Fix)
+- **問題**: 記錄「投資賺了 15000」後，詢問「花費多少」時，系統將這筆錢加進了總額，導致支出暴增。
+- **修復**:
+  - **Guidebook 更新**: 定義「賺、獲利、股息」等關鍵字為 `INCOME` 類型。
+  - **統計邏輯更新**: 在 `groq.ts` 與 `expense.ts` 中，將 `Total Income` 與 `Total Expense` 分開計算。
+  - 無論 LLM 回傳什麼類型的查詢結果，系統現在都能正確區分「流入」與「流出」，不會再將收入誤算為支出。
 
 ---
-
-**修復日期**: 2025-12-06
-**修復版本**: v1.1.0
-**狀態**: ✅ 已修復，待測試驗證
+✅ **目前狀態**: 所有功能皆已測試通過並推送到 `main` 分支。
