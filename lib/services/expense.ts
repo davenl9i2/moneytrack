@@ -91,7 +91,10 @@ export const ExpenseService = {
         });
 
         // Generate Reply Text
-        const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+        const totalExpense = expenses.filter(e => e.type === 'EXPENSE').reduce((sum, e) => sum + e.amount, 0);
+        const totalIncome = expenses.filter(e => e.type === 'INCOME').reduce((sum, e) => sum + e.amount, 0);
+        const balance = totalIncome - totalExpense;
+
         const count = expenses.length;
         const queryTypeText = criteria.queryType === 'INCOME' ? '收入' : criteria.queryType === 'EXPENSE' ? '支出' : '收支';
 
@@ -116,7 +119,17 @@ export const ExpenseService = {
                 .map(([cat, amt]) => `${cat}: $${amt}`)
                 .join('\n');
 
-            replyText = `📊 查詢結果\n\n${queryTypeText}總額: $${total}\n筆數: ${count}\n\n${topCategories ? '主要分類:\n' + topCategories : '無資料'}`;
+            let header = `📊 查詢結果 (${queryTypeText})`;
+            let body = "";
+            if (criteria.queryType === 'INCOME') {
+                body = `總收入: $${totalIncome}`;
+            } else if (criteria.queryType === 'EXPENSE') {
+                body = `總支出: $${totalExpense}`;
+            } else {
+                body = `總收入: $${totalIncome}\n總支出: $${totalExpense}\n淨收支: $${balance}`;
+            }
+
+            replyText = `${header}\n\n${body}\n筆數: ${count}\n\n${topCategories ? '主要分類:\n' + topCategories : '無資料'}`;
         }
 
         return replyText;
