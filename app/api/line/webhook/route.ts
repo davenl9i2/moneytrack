@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateSignature, WebhookEvent } from '@line/bot-sdk';
 import { lineClient } from '@/lib/line';
 import { prisma } from '@/lib/prisma';
-import { parseMessageWithGroq } from '@/lib/groq';
+import { parseMessageWithGroq, summarizeQueryResults } from '@/lib/groq';
 
 const channelSecret = process.env.LINE_CHANNEL_SECRET || '';
 
@@ -80,14 +80,27 @@ async function handleTextMessage(event: any) {
 
 
 
-        // 2. Parse Message using Groq (Llama 3)
-        const parsedData = await parseMessageWithGroq(text);
+        // 2. Fetch Recent Context for LLM
+        const recentExpenses = await prisma.expense.findMany({
+            where: { userId: user.lineUserId },
+            orderBy: { id: 'desc' },
+            take: 5,
+        });
+
+        const recentRecordsStr = recentExpenses.map(e =>
+            `[ID:${e.id}] ${e.date.toISOString().split('T')[0]} ${e.category} $${e.amount} (${e.description || '無備註'})`
+        ).join('\n');
+
+        console.log('📜 Recent Records Context:\n', recentRecordsStr);
+
+        // 3. Parse Message using Groq (Llama 3)
+        const parsedData = await parseMessageWithGroq(text, recentRecordsStr);
 
         // Debug: Log parsed data
         console.log('📋 Parsed Data:', JSON.stringify(parsedData, null, 2));
 
         if (parsedData) {
-            const { intent, category, amount, description, date, type, reply, queryStartDate, queryEndDate, queryType } = parsedData;
+            const { intent, category, amount, description, date, type, reply, queryStartDate, queryEndDate, queryType, targetId } = parsedData;
 
             console.log(`🎯 Intent detected: ${intent}`);
 
@@ -142,20 +155,37 @@ async function handleTextMessage(event: any) {
                 const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
                 const count = expenses.length;
 
-                // Group by category
-                const byCategory: Record<string, number> = {};
-                expenses.forEach((exp) => {
-                    byCategory[exp.category] = (byCategory[exp.category] || 0) + exp.amount;
-                });
-
-                const topCategories = Object.entries(byCategory)
-                    .sort(([, a], [, b]) => b - a)
-                    .slice(0, 3)
-                    .map(([cat, amt]) => `${cat}: $${amt}`)
-                    .join('\n');
-
+                // Try to get a conversational summary from LLM
                 const queryTypeText = queryType === 'INCOME' ? '收入' : queryType === 'EXPENSE' ? '支出' : '收支';
-                const replyText = `📊 查詢結果\n\n${queryTypeText}總額: $${total}\n筆數: ${count}\n\n${topCategories ? '主要分類:\n' + topCategories : '無資料'}`;
+                let replyText = '';
+
+                try {
+                    console.log('🤖 Generating conversational summary...');
+                    const summary = await summarizeQueryResults(expenses, queryTypeText);
+                    if (summary) {
+                        replyText = summary;
+                        console.log('✅ Summary generated:', replyText);
+                    }
+                } catch (err) {
+                    console.warn('⚠️ Summary generation failed, falling back to template:', err);
+                }
+
+                // Fallback to template if summary failed
+                if (!replyText) {
+                    // Group by category
+                    const byCategory: Record<string, number> = {};
+                    expenses.forEach((exp) => {
+                        byCategory[exp.category] = (byCategory[exp.category] || 0) + exp.amount;
+                    });
+
+                    const topCategories = Object.entries(byCategory)
+                        .sort(([, a], [, b]) => b - a)
+                        .slice(0, 3)
+                        .map(([cat, amt]) => `${cat}: $${amt}`)
+                        .join('\n');
+
+                    replyText = `📊 查詢結果\n\n${queryTypeText}總額: $${total}\n筆數: ${count}\n\n${topCategories ? '主要分類:\n' + topCategories : '無資料'}`;
+                }
 
                 console.log('💬 Sending reply:', replyText);
 
@@ -224,6 +254,80 @@ async function handleTextMessage(event: any) {
                     });
                 } catch (lineError) {
                     console.warn("LINE Reply Failed (Expected in Test Mode/Dummy Token):", lineError);
+                }
+
+            } else if (intent === 'MODIFY') {
+                console.log('✏️ Processing MODIFY intent...');
+
+                let targetRecord = null;
+
+                // A. Try using the ID identified by LLM
+                if (targetId) {
+                    console.log(`🤖 LLM identified target ID: ${targetId}`);
+                    targetRecord = await prisma.expense.findUnique({
+                        where: { id: targetId },
+                    });
+
+                    // Security check: ensure this record belongs to the user
+                    if (targetRecord && targetRecord.userId !== user.lineUserId) {
+                        console.warn('⚠️ Security Alert: User tried to modify record not belonging to them');
+                        targetRecord = null;
+                    }
+                }
+
+                // B. Fallback: Find the last record for this user
+                if (!targetRecord) {
+                    console.log('⚠️ No target ID from LLM or invalid ID, falling back to last record');
+                    targetRecord = await prisma.expense.findFirst({
+                        where: { userId: user.lineUserId },
+                        orderBy: { id: 'desc' },
+                    });
+                }
+
+                if (!targetRecord) {
+                    console.warn('⚠️ No record found to modify');
+                    // Reply error
+                    try {
+                        await lineClient.replyMessage({
+                            replyToken,
+                            messages: [
+                                {
+                                    type: 'text',
+                                    text: '抱歉，找不到記帳紀錄，無法進行修改。😅',
+                                },
+                            ],
+                        });
+                    } catch (lineError) {
+                        console.warn("LINE Reply Failed:", lineError);
+                    }
+                    return;
+                }
+
+                // 2. Update the record
+                console.log(`📝 Updating expense ID ${targetRecord.id} to amount ${amount}`);
+
+                const updatedExpense = await prisma.expense.update({
+                    where: { id: targetRecord.id },
+                    data: {
+                        amount: Math.abs(amount), // Update amount
+                    },
+                });
+
+                console.log("✅ Expense updated");
+
+                // 3. Reply success
+                try {
+                    await lineClient.replyMessage({
+                        replyToken,
+                        messages: [
+                            {
+                                type: 'text',
+                                text: reply || `✅ 修改完成！\n\n已將 [${updatedExpense.category}] 改為 $${updatedExpense.amount} 囉！✏️`,
+                            },
+                        ],
+                    });
+                } catch (lineError) {
+                    console.warn("LINE Reply Failed:", lineError);
                 }
 
             } else if (intent === 'CHAT') {

@@ -1,92 +1,152 @@
 import Groq from "groq-sdk";
 
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
 
+export async function parseMessageWithGroq(message: string, recentRecords: string = "") {
+  if (!process.env.GROQ_API_KEY) {
+    console.warn("GROQ_API_KEY is missing. Returning null.");
+    return null;
+  }
 
-export async function parseMessageWithGroq(message: string) {
-    if (!process.env.GROQ_API_KEY) {
-        console.warn("GROQ_API_KEY is missing. Using fallback/regex logic if implemented elsewhere, or returning null.");
-        // We could implement Regex fallback HERE if we wanted parsing to be robust within this function
-        // But for now, let's return null so the caller can handle fallback.
-        return null;
-    }
-
-    const systemPrompt = `
+  const systemPrompt = `
     You are "小金庫" (Little Treasure), an AI assistant for a personal accounting LINE bot. 
-    Your role is to parse user messages into structured financial data JSON or handle queries.
     
     **Personality & Tone:**
     - You are SUPER lively, enthusiastic, and cute! ✨
     - Use a warm, energetic, and supportive conversational tone in Traditional Chinese.
-    - Use plenty of relevant emojis (e.g., 💰, 🎉, 😱, 🍱, 🚗, ❤️).
-    - Act like a close friend who cares about the user's financial well-being.
-    - Avoid robotic or overly formal language.
+    - Use relevant emojis (e.g., 💰, 🎉, 🍱, ✏️).
 
     Current Date: ${new Date().toISOString().split('T')[0]}
-
+    
+    **Recent Records Context:**
+    ${recentRecords || "(No recent records available)"}
+    
     Output JSON format:
     {
-      "intent": "RECORD" | "QUERY" | "CHAT",
-      "amount": number (MUST be 0 for QUERY and CHAT intents, only set for RECORD),
-      "category": string (e.g., "飲食", "交通", "購物", "娛樂", "收入", "其他"),
-      "note": string (The item description or original message context),
-      "date": string (ISO 8601 YYYY-MM-DD),
+      "intent": "RECORD" | "QUERY" | "CHAT" | "MODIFY",
+      "amount": number (For MODIFY: new amount. For RECORD: positive number. Others: 0),
+      "category": string,
+      "note": string,
+      "date": string,
       "type": "EXPENSE" | "INCOME",
-      "queryStartDate": string (ISO 8601 YYYY-MM-DD, REQUIRED for QUERY intent),
-      "queryEndDate": string (ISO 8601 YYYY-MM-DD, REQUIRED for QUERY intent),
-      "queryType": "EXPENSE" | "INCOME" | "ALL" (for QUERY intent),
-      "reply": string (A lively, cute, and natural language reply to the user)
+      "queryStartDate": string,
+      "queryEndDate": string,
+      "queryType": "EXPENSE" | "INCOME" | "ALL",
+      "targetId": number | null (For MODIFY: The ID of the record to update, inferred from Recent Records),
+      "reply": string
     }
 
     Rules:
-    1. **RECORD Intent**: 
-       - If message implies spending/income with amount, set intent="RECORD".
-       - "reply" MUST be fun! 
-         - **Expense**: Be supportive but cute. 
-           - E.g., "收到！幫您記下這筆午餐費了，別餓著囉 🍱", "買新衣服嗎？太棒了！👗 記下來囉！", "交通費記好了，路上小心喔 🚗"
-         - **Income**: Be super celebratory! 
-           - E.g., "哇！發薪水啦 🎉 辛苦了！幫您記下這筆大大的收入 💰", "太棒了！有額外收入耶 🤑 記帳完成！"
-       - Amount MUST be positive.
+    1. **RECORD**: 
+       - If message implies spending/income, set intent="RECORD".
+       - "reply": Be fun! Expense=Supportive, Income=Celebratory.
 
-    2. **QUERY Intent**: 
-       - If asking about history/stats, set intent="QUERY", amount=0.
-       - "reply" should be eager to help. 
-         - E.g., "沒問題！馬上幫您查查看... 🧐", "想知道最近花多少嗎？交給我！💪", "正在翻閱小金庫的紀錄本... 📖"
+    2. **QUERY**: 
+       - Asking stats/history. Set amount=0.
 
-    3. **CHAT Intent**: 
-       - If not accounting related, set intent="CHAT", amount=0.
-       - Reply heavily depends on user input but keep it cute.
-         - E.g., "嘿嘿，我在這！隨時準備幫您記帳喔 😉", "今天過得好嗎？記得要多喝水喔 💧"
+    3. **MODIFY**:
+       - If user wants to correct a mistake (e.g., "改為90", "此筆是午餐", "不是80是90").
+       - **CRITICAL**: Look at the "Recent Records Context".
+       - If the user specifies which record (e.g., "Lunch", "The last one", "The $80 one"), try to find the matching Record ID from the context.
+       - Set "targetId" to that Record ID.
+       - Set "amount" to the NEW value (if changing amount).
+       - "reply": Confirm exactly what was changed. E.g., "沒問題！已將 [ID:123] 的午餐改為 $90 囉 ✏️"
 
-    4. Return ONLY the JSON object. No markdown.
-    
-    Examples:
-    - "午餐 100" → {"intent": "RECORD", "amount": 100, "category": "飲食", "type": "EXPENSE", "reply": "收到！午餐費 $100 記好囉，要吃飽飽喔 🍱"}
-    - "薪水 50000" → {"intent": "RECORD", "amount": 50000, "category": "收入", "type": "INCOME", "reply": "哇賽！發薪日最快樂了 🎉 $50,000 入帳確認！辛苦啦 ❤️"}
-    - "我昨天花多少錢?" → {"intent": "QUERY", "amount": 0, "reply": "好的！讓我來看看昨天的戰績... 🧐", ...}
-    - "你好" → {"intent": "CHAT", "amount": 0, "reply": "嗨嗨！我是小金庫 ✨ 今天想記點什麼呢？"}
+    4. **CHAT**: General conversation.
+
+    5. Return ONLY the JSON object.
   `;
 
-    const groq = new Groq({
-        apiKey: process.env.GROQ_API_KEY,
+  try {
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: message },
+      ],
+      model: "llama-3.3-70b-versatile",
+      temperature: 0.5,
+      response_format: { type: "json_object" },
     });
 
-    try {
-        const chatCompletion = await groq.chat.completions.create({
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: message },
-            ],
-            model: "llama-3.3-70b-versatile", // Fast and efficient
-            temperature: 0.5,
-            response_format: { type: "json_object" },
-        });
+    const content = chatCompletion.choices[0]?.message?.content;
+    if (!content) return null;
 
-        const content = chatCompletion.choices[0]?.message?.content;
-        if (!content) return null;
+    return JSON.parse(content);
+  } catch (error) {
+    console.error("Groq parsing error:", error);
+    return null;
+  }
+}
 
-        return JSON.parse(content);
-    } catch (error) {
-        console.error("Groq parsing error:", error);
-        return null;
-    }
+export async function summarizeQueryResults(expenses: any[], queryType: string) {
+  if (!process.env.GROQ_API_KEY || expenses.length === 0) {
+    return null;
+  }
+
+  // Prepare data for LLM
+  // If too many records, we provide a summarized view to save tokens/complexity
+  let dataContext = "";
+  const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
+
+  if (expenses.length <= 10) {
+    // Detailed list for small number of records
+    dataContext = expenses.map(e =>
+      `- ${e.date.toISOString().split('T')[0]} [${e.category}] $${e.amount} (${e.description || '無備註'})`
+    ).join('\n');
+  } else {
+    // Aggregated view for large number of records
+    const byCategory: Record<string, number> = {};
+    expenses.forEach(e => {
+      byCategory[e.category] = (byCategory[e.category] || 0) + e.amount;
+    });
+    const topCategories = Object.entries(byCategory)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
+      .map(([cat, amt]) => `${cat}: $${amt}`)
+      .join(', ');
+
+    dataContext = `Total Records: ${expenses.length}\nTotal Amount: $${totalAmount}\nTop Categories: ${topCategories}\n(Too many records to list individually)`;
+  }
+
+  const systemPrompt = `
+    You are "小金庫" (Little Treasure), a super lively and cute AI accounting assistant! ✨
+    
+    User has queried for their financial records.
+    Your job is to summarize the provided database results into a natural, conversational response in Traditional Chinese.
+    
+    **Instructions:**
+    1. **Conversational**: Don't just list numbers. Tell a story! 
+       - Instead of "Food: $100, Transport: $50", say "You spent $100 on yummy food and $50 getting around today! 🍔🚗"
+    2. **Detail Level**:
+       - If there are specific items (few records), mention them by name/description! (e.g., "買了手錶 $2000，又吃了漢堡 $150").
+       - If there are many records, focus on the big picture (Total and Top Categories).
+    3. **Tone**: Enthusiastic, warm, using Emojis! 
+    4. **Accuracy**: Make sure the numbers match the data provided.
+
+    **Query Type**: ${queryType}
+    **Total Amount**: $${totalAmount}
+    
+    **Data Context:**
+    ${dataContext}
+    
+    Return ONLY the text reponse. No JSON.
+    `;
+
+  try {
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "請幫我總結這些消費紀錄！" },
+      ],
+      model: "llama-3.3-70b-versatile",
+      temperature: 0.7,
+    });
+
+    return chatCompletion.choices[0]?.message?.content;
+  } catch (error) {
+    console.error("Groq summarization error:", error);
+    return null;
+  }
 }
