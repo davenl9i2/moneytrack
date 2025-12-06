@@ -27,7 +27,7 @@ export default function Dashboard() {
     const [editingExpense, setEditingExpense] = useState<Expense | undefined>(undefined);
 
     // Sort State
-    const [sortBy, setSortBy] = useState<SortOption>('date-asc');
+    const [sortBy, setSortBy] = useState<SortOption>('date-desc');
     const [showSortMenu, setShowSortMenu] = useState(false);
 
     // LIFF State
@@ -339,10 +339,10 @@ export default function Dashboard() {
                                 zIndex: 1000
                             }}>
                                 {[
-                                    { value: 'date-asc' as SortOption, label: '日期 舊→新', icon: '📅↑' },
-                                    { value: 'date-desc' as SortOption, label: '日期 新→舊', icon: '📅↓' },
-                                    { value: 'amount-asc' as SortOption, label: '金額 小→大', icon: '💰↑' },
-                                    { value: 'amount-desc' as SortOption, label: '金額 大→小', icon: '💰↓' },
+                                    { value: 'date-asc' as SortOption, label: '日期 舊→新' },
+                                    { value: 'date-desc' as SortOption, label: '日期 新→舊' },
+                                    { value: 'amount-asc' as SortOption, label: '金額 小→大' },
+                                    { value: 'amount-desc' as SortOption, label: '金額 大→小' },
                                 ].map(option => (
                                     <div
                                         key={option.value}
@@ -375,7 +375,6 @@ export default function Dashboard() {
                                             }
                                         }}
                                     >
-                                        <span>{option.icon}</span>
                                         <span>{option.label}</span>
                                     </div>
                                 ))}
