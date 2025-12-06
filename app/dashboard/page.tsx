@@ -30,6 +30,12 @@ export default function Dashboard() {
     const [sortBy, setSortBy] = useState<SortOption>('date-desc');
     const [showSortMenu, setShowSortMenu] = useState(false);
 
+    // Month Filter State
+    const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    });
+
     // LIFF State
     const [userId, setUserId] = useState<string>('');
     const [displayName, setDisplayName] = useState<string>('');
@@ -106,9 +112,17 @@ export default function Dashboard() {
         }
     };
 
+    // Month Navigation
+    const changeMonth = (offset: number) => {
+        const [year, month] = selectedMonth.split('-').map(Number);
+        const date = new Date(year, month - 1 + offset, 1);
+        const newMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        setSelectedMonth(newMonth);
+    };
+
     const handleSwipe = (direction: 'LEFT' | 'RIGHT') => {
-        if (direction === 'LEFT' && viewMode === 'EXPENSE') setViewMode('INCOME');
-        if (direction === 'RIGHT' && viewMode === 'INCOME') setViewMode('EXPENSE');
+        if (direction === 'LEFT') changeMonth(1);  // Next month
+        if (direction === 'RIGHT') changeMonth(-1); // Previous month
     };
 
     // Swipe Handlers
@@ -159,7 +173,13 @@ export default function Dashboard() {
         }
     };
 
-    const currentTotal = expenses
+    // Filter expenses by selected month
+    const monthlyExpenses = expenses.filter(e => {
+        const expenseMonth = new Date(e.date).toISOString().slice(0, 7);
+        return expenseMonth === selectedMonth;
+    });
+
+    const currentTotal = monthlyExpenses
         .filter(e => (e.type || 'EXPENSE') === viewMode)
         .reduce((sum, e) => sum + e.amount, 0);
 
@@ -268,6 +288,11 @@ export default function Dashboard() {
                 style={{ marginBottom: '24px', position: 'relative', overflow: 'hidden', paddingBottom: '32px' }}
             >
                 <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                    {/* Month Display */}
+                    <div style={{ fontSize: '0.9rem', color: '#9E9E9E', marginBottom: '12px' }}>
+                        {selectedMonth.split('-')[0]}年 {parseInt(selectedMonth.split('-')[1])}月
+                    </div>
+
                     {/* Toggle Pills */}
                     <div style={{ display: 'inline-flex', background: '#F0F0F0', borderRadius: '20px', padding: '4px', marginBottom: '16px' }}>
                         <div onClick={() => setViewMode('EXPENSE')} style={{
@@ -289,10 +314,10 @@ export default function Dashboard() {
                     </h2>
                 </div>
 
-                <DashboardChart type={viewMode} data={expenses} />
+                <DashboardChart type={viewMode} data={monthlyExpenses} />
 
                 <div style={{ textAlign: 'center', marginTop: '20px', color: '#C7CEEA', fontSize: '0.8rem' }}>
-                    {viewMode === 'EXPENSE' ? '← 向左滑動查看收入' : '向右滑動查看支出 →'}
+                    ← 滑動切換月份 →
                 </div>
             </div>
 
