@@ -7,6 +7,49 @@ const groq = new Groq({
 import fs from 'fs';
 import path from 'path';
 
+// Define model priority
+const MODELS = [
+  "llama-3.3-70b-versatile", // Primary: High intelligence
+  "llama-3.1-8b-instant",    // Backup: High speed/availability
+];
+
+/**
+ * Helper to try multiple models in sequence
+ */
+async function callGroqWithFallback(
+  messages: any[],
+  temperature: number = 0.5,
+  jsonMode: boolean = false
+): Promise<string | null> {
+  for (const model of MODELS) {
+    try {
+      // console.log(`🤖 Trying model: ${model}...`);
+      const params: any = {
+        messages,
+        model,
+        temperature,
+      };
+
+      if (jsonMode) {
+        params.response_format = { type: "json_object" };
+      }
+
+      const chatCompletion = await groq.chat.completions.create(params);
+      return chatCompletion.choices[0]?.message?.content || null;
+
+    } catch (error: any) {
+      console.warn(`⚠️ Model ${model} failed: ${error.message}`);
+      // If it's the last model, throw or return null
+      if (model === MODELS[MODELS.length - 1]) {
+        console.error("❌ All models failed.");
+        return null;
+      }
+      // Otherwise continue to next model
+    }
+  }
+  return null;
+}
+
 export async function parseMessageWithGroq(message: string, recentRecords: string = "") {
   if (!process.env.GROQ_API_KEY) {
     console.warn("GROQ_API_KEY is missing. Returning null.");
@@ -47,19 +90,12 @@ export async function parseMessageWithGroq(message: string, recentRecords: strin
   `;
 
   try {
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: message },
-      ],
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.5,
-      response_format: { type: "json_object" },
-    });
+    const content = await callGroqWithFallback([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: message },
+    ], 0.5, true);
 
-    const content = chatCompletion.choices[0]?.message?.content;
     if (!content) return null;
-
     return JSON.parse(content);
   } catch (error) {
     console.error("Groq parsing error:", error);
@@ -142,16 +178,12 @@ export async function summarizeQueryResults(expenses: any[], queryType: string, 
     `;
 
   try {
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: "請幫我總結這些紀錄！" },
-      ],
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.7,
-    });
+    const content = await callGroqWithFallback([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: "請幫我總結這些紀錄！" },
+    ], 0.7, false);
 
-    return chatCompletion.choices[0]?.message?.content;
+    return content;
   } catch (error) {
     console.error("Groq summarization error:", error);
     return null;

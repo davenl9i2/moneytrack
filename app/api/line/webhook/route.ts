@@ -81,15 +81,24 @@ async function handleTextMessage(event: any) {
 
             // 3. MODIFY
             else if (intent === 'MODIFY') {
-                const result = await ExpenseService.modifyExpense(userId, targetId, amount);
+                const result = await ExpenseService.modifyExpense(userId, targetId, {
+                    amount,
+                    category,
+                    description: note, // Map 'note' from LLM to 'description'
+                    date: date ? new Date(date) : undefined
+                });
+
                 if (result.success) {
-                    replyText = result.message!; // Logic message overrides LLM chat slightly for precision
-                    // Or we could append: replyText = `${reply} (${result.message})`;
-                    // But usually the Service message is more precise about what DB ID was changed.
-                    // Let's stick to the Service message for clarity on "What happened in DB".
+                    replyText = result.message!;
                 } else {
                     replyText = result.message!;
                 }
+            }
+
+            // 4. DELETE
+            else if (intent === 'DELETE') {
+                const result = await ExpenseService.deleteExpense(userId, targetId);
+                replyText = result.message!;
             }
 
             // 4. CHAT (Default fallthrough)

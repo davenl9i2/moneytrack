@@ -138,7 +138,7 @@ export const ExpenseService = {
     /**
      * Modify an existing expense
      */
-    async modifyExpense(userId: string, targetId: number | null, newAmount: number) {
+    async modifyExpense(userId: string, targetId: number | null, updates: { amount?: number, category?: string, description?: string, date?: Date }) {
         let targetRecord = null;
 
         // A. Try using the ID identified by LLM
@@ -164,16 +164,79 @@ export const ExpenseService = {
             return { success: false, message: '⚠️ 找不到可以修改的紀錄喔！' };
         }
 
-        // 执行更新
+        // Build update data
+        const dataToUpdate: any = {};
+        if (updates.amount !== undefined && updates.amount !== 0) dataToUpdate.amount = updates.amount;
+        if (updates.category) dataToUpdate.category = updates.category;
+        // 'description' in DB is 'note' in user language
+        if (updates.description) dataToUpdate.description = updates.description;
+        if (updates.date) dataToUpdate.date = updates.date;
+
+        if (Object.keys(dataToUpdate).length === 0) {
+            return { success: false, message: '❓ 沒有偵測到需要修改的內容喔！' };
+        }
+
+        // Perform update
         const updatedRecord = await prisma.expense.update({
             where: { id: targetRecord.id },
-            data: { amount: newAmount },
+            data: dataToUpdate,
         });
+
+        // Construct intuitive message
+        const changes = [];
+        if (dataToUpdate.amount) changes.push(`金額 $${dataToUpdate.amount}`);
+        if (dataToUpdate.category) changes.push(`分類 [${dataToUpdate.category}]`);
+        if (dataToUpdate.description) changes.push(`備註 (${dataToUpdate.description})`);
+        if (dataToUpdate.date) changes.push(`日期 ${dataToUpdate.date.toISOString().split('T')[0]}`);
 
         return {
             success: true,
             record: updatedRecord,
-            message: `此筆 [${updatedRecord.category}] 金額已更新為 $${newAmount} 囉！✅`
+            message: `此筆紀錄已更新：${changes.join('、')} 囉！✅`
         };
-    }
+    },
+
+    /**
+     * Delete an existing expense
+     */
+    async deleteExpense(userId: string, targetId: number | null) {
+        let targetRecord = null;
+
+        // A. Try using the ID identified by LLM
+        if (targetId) {
+            targetRecord = await prisma.expense.findUnique({
+                where: { id: targetId },
+            });
+            // Security check
+            if (targetRecord && targetRecord.userId !== userId) {
+                targetRecord = null;
+            }
+        }
+
+        // B. Fallback: Find the last record
+        if (!targetRecord) {
+            targetRecord = await prisma.expense.findFirst({
+                where: { userId },
+                orderBy: { id: 'desc' },
+            });
+        }
+
+        if (!targetRecord) {
+            return { success: false, message: '⚠️ 找不到可以刪除的紀錄喔！' };
+        }
+
+        // Perform deletion
+        await prisma.expense.delete({
+            where: { id: targetRecord.id },
+        });
+
+        // Format date for the message
+        const dateStr = targetRecord.date.toISOString().split('T')[0];
+
+        return {
+            success: true,
+            record: targetRecord,
+            message: `已刪除 [${dateStr}] 的 [${targetRecord.category}] $${targetRecord.amount} (${targetRecord.description || '無備註'}) 紀錄囉！🗑️`
+        };
+    },
 };
