@@ -14,6 +14,8 @@ type Expense = {
     type: 'EXPENSE' | 'INCOME';
 };
 
+type SortOption = 'date-asc' | 'date-desc' | 'amount-asc' | 'amount-desc';
+
 export default function Dashboard() {
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [viewMode, setViewMode] = useState<'EXPENSE' | 'INCOME'>('EXPENSE');
@@ -24,6 +26,10 @@ export default function Dashboard() {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingExpense, setEditingExpense] = useState<Expense | undefined>(undefined);
 
+    // Sort State
+    const [sortBy, setSortBy] = useState<SortOption>('date-asc');
+    const [showSortMenu, setShowSortMenu] = useState(false);
+
     // LIFF State
     const [userId, setUserId] = useState<string>('');
     const [displayName, setDisplayName] = useState<string>('');
@@ -33,6 +39,24 @@ export default function Dashboard() {
     useEffect(() => {
         initLiff();
     }, []);
+
+    // Close sort menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (showSortMenu && !target.closest('.sort-menu-container')) {
+                setShowSortMenu(false);
+            }
+        };
+
+        if (showSortMenu) {
+            document.addEventListener('click', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('click', handleClickOutside);
+        };
+    }, [showSortMenu]);
 
     const initLiff = async () => {
         try {
@@ -140,6 +164,22 @@ export default function Dashboard() {
         .reduce((sum, e) => sum + e.amount, 0);
 
     const filteredExpenses = expenses.filter(e => (e.type || 'EXPENSE') === viewMode);
+
+    // Sort expenses based on sortBy
+    const sortedExpenses = [...filteredExpenses].sort((a, b) => {
+        switch (sortBy) {
+            case 'date-asc':
+                return new Date(a.date).getTime() - new Date(b.date).getTime();
+            case 'date-desc':
+                return new Date(b.date).getTime() - new Date(a.date).getTime();
+            case 'amount-asc':
+                return a.amount - b.amount;
+            case 'amount-desc':
+                return b.amount - a.amount;
+            default:
+                return 0;
+        }
+    });
 
     // Calculate Net Balance (Income - Expense)
     const totalIncome = expenses.filter(e => e.type === 'INCOME').reduce((s, e) => s + e.amount, 0);
@@ -257,12 +297,98 @@ export default function Dashboard() {
             </div>
 
             <div className="card">
-                <h3 style={{ marginBottom: '20px', fontWeight: 'bold', color: '#5A4A42', fontSize: '1.1rem' }}>近期紀錄</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <h3 style={{ fontWeight: 'bold', color: '#5A4A42', fontSize: '1.1rem', margin: 0 }}>近期紀錄</h3>
+
+                    {/* Sort Button */}
+                    <div className="sort-menu-container" style={{ position: 'relative' }}>
+                        <button
+                            onClick={() => setShowSortMenu(!showSortMenu)}
+                            style={{
+                                background: '#F0F0F0',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '8px 12px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                fontSize: '0.9rem',
+                                color: '#5A4A42',
+                                transition: 'background 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#E0E0E0'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = '#F0F0F0'}
+                        >
+                            <span style={{ fontSize: '1.1rem' }}>⇅</span>
+                            <span style={{ fontSize: '0.85rem' }}>排序</span>
+                        </button>
+
+                        {/* Sort Menu */}
+                        {showSortMenu && (
+                            <div style={{
+                                position: 'absolute',
+                                top: '100%',
+                                right: 0,
+                                marginTop: '8px',
+                                background: 'white',
+                                borderRadius: '12px',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                padding: '8px',
+                                minWidth: '160px',
+                                zIndex: 1000
+                            }}>
+                                {[
+                                    { value: 'date-asc' as SortOption, label: '日期 舊→新', icon: '📅↑' },
+                                    { value: 'date-desc' as SortOption, label: '日期 新→舊', icon: '📅↓' },
+                                    { value: 'amount-asc' as SortOption, label: '金額 小→大', icon: '💰↑' },
+                                    { value: 'amount-desc' as SortOption, label: '金額 大→小', icon: '💰↓' },
+                                ].map(option => (
+                                    <div
+                                        key={option.value}
+                                        onClick={() => {
+                                            setSortBy(option.value);
+                                            setShowSortMenu(false);
+                                        }}
+                                        style={{
+                                            padding: '10px 12px',
+                                            borderRadius: '8px',
+                                            cursor: 'pointer',
+                                            background: sortBy === option.value ? '#FFB7B2' : 'transparent',
+                                            color: sortBy === option.value ? 'white' : '#5A4A42',
+                                            fontWeight: sortBy === option.value ? 'bold' : 'normal',
+                                            fontSize: '0.9rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            transition: 'all 0.2s',
+                                            marginBottom: '4px'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            if (sortBy !== option.value) {
+                                                e.currentTarget.style.background = '#F5F5F5';
+                                            }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            if (sortBy !== option.value) {
+                                                e.currentTarget.style.background = 'transparent';
+                                            }
+                                        }}
+                                    >
+                                        <span>{option.icon}</span>
+                                        <span>{option.label}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 {filteredExpenses.length === 0 ? (
                     <p style={{ color: '#ccc', textAlign: 'center', padding: '20px' }}>還沒有紀錄哦，按 + 新增一筆吧！</p>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        {filteredExpenses.map(expense => (
+                        {sortedExpenses.map(expense => (
                             <div key={expense.id}
                                 onClick={() => { setEditingExpense(expense); setIsFormOpen(true); }}
                                 style={{
