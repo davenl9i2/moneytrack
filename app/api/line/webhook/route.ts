@@ -47,19 +47,36 @@ async function handleTextMessage(event: any) {
     console.log(`Received message from ${lineUserId}: ${text}`);
 
     try {
-        // 1. Find or Create User
+        // 1. Check if User exists
         let user = await prisma.user.findUnique({
             where: { lineUserId },
         });
 
         if (!user) {
-            user = await prisma.user.create({
-                data: {
-                    lineUserId,
-                    displayName: 'User', // Default
-                },
-            });
+            // New user - guide them to register via web
+            console.log(`🆕 New user detected: ${lineUserId}`);
+
+            const liffUrl = process.env.NEXT_PUBLIC_LIFF_ID
+                ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}`
+                : 'https://liff.line.me/2008640057-D5PyLKZv';
+
+            try {
+                await lineClient.replyMessage({
+                    replyToken,
+                    messages: [
+                        {
+                            type: 'text',
+                            text: `👋 歡迎使用小金庫！\n\n您是第一次使用，請先點擊下方連結進入網頁完成註冊：\n\n🔗 ${liffUrl}\n\n註冊完成後，就可以開始記帳囉！💰`,
+                        },
+                    ],
+                });
+            } catch (lineError) {
+                console.warn("LINE Reply Failed:", lineError);
+            }
+            return; // Stop processing for new users
         }
+
+        console.log(`✅ Existing user: ${user.lineUserId}`);
 
 
 
@@ -219,7 +236,7 @@ async function handleTextMessage(event: any) {
                         messages: [
                             {
                                 type: 'text',
-                                text: reply || '您好！我是您的記帳小幫手 😊',
+                                text: reply || '您好！我是小金庫 💰\n您的貼心記帳小幫手～',
                             },
                         ],
                     });

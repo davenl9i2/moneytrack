@@ -101,6 +101,22 @@ export default function Dashboard() {
                 setUserId(profile.userId);
                 setDisplayName(profile.displayName);
                 setIsLiffReady(true);
+
+                // Auto-register user on first web login
+                try {
+                    await fetch('/api/users/register', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            userId: profile.userId,
+                            displayName: profile.displayName
+                        })
+                    });
+                    console.log('✅ User registration check completed');
+                } catch (regError) {
+                    console.warn('Registration check failed:', regError);
+                    // Continue anyway - user might already exist
+                }
             } else {
                 setLiffError('無法取得使用者資訊');
             }
