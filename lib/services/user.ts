@@ -12,7 +12,7 @@ export async function getUserOrInviteRegister(lineUserId: string, replyToken: st
 
     if (!user) {
         // User not found, send registration invitation
-        const registerUrl = `https://liff.line.me/${process.env.LINE_LIFF_ID}`;
+        const registerUrl = `https://liff.line.me/2008640057-D5PyLKZv`;
         const welcomeMessage: TextMessage = {
             type: 'text',
             text: `歡迎使用小金庫！✨\n\n我需要先認識你才能幫你記帳喔。\n請點擊下方連結進行「一鍵註冊」：\n\n${registerUrl}\n\n(註冊只需 3 秒鐘！)`
