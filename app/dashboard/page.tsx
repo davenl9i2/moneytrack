@@ -37,6 +37,9 @@ export default function Dashboard() {
     });
     const [showMonthPicker, setShowMonthPicker] = useState(false);
 
+    // Toast State
+    const [toast, setToast] = useState<{ message: string; show: boolean }>({ message: '', show: false });
+
     // LIFF State
     const [userId, setUserId] = useState<string>('');
     const [displayName, setDisplayName] = useState<string>('');
@@ -64,6 +67,20 @@ export default function Dashboard() {
             document.removeEventListener('click', handleClickOutside);
         };
     }, [showSortMenu]);
+
+    // Toast auto-hide
+    useEffect(() => {
+        if (toast.show) {
+            const timer = setTimeout(() => {
+                setToast({ message: '', show: false });
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [toast.show]);
+
+    const showToast = (message: string) => {
+        setToast({ message, show: true });
+    };
 
     const initLiff = async () => {
         try {
@@ -156,9 +173,10 @@ export default function Dashboard() {
             setIsFormOpen(false);
             setEditingExpense(undefined);
             fetchExpenses();
+            showToast(isEditing ? '✅ 編輯成功！' : '✅ 新增成功！');
         } catch (err) {
             console.error(err);
-            alert('儲存失敗');
+            showToast('❌ 儲存失敗，請重試');
         }
     };
 
@@ -575,6 +593,30 @@ export default function Dashboard() {
                 onSubmit={handleSave}
                 onCancel={() => { setIsFormOpen(false); setEditingExpense(undefined); }}
             />
+
+            {/* Toast Notification */}
+            {toast.show && (
+                <div
+                    className="fade-in"
+                    style={{
+                        position: 'fixed',
+                        top: '80px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        background: '#5A4A42',
+                        color: 'white',
+                        padding: '12px 24px',
+                        borderRadius: '24px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                        zIndex: 3000,
+                        fontSize: '0.95rem',
+                        fontWeight: '600',
+                        whiteSpace: 'nowrap'
+                    }}
+                >
+                    {toast.message}
+                </div>
+            )}
         </main>
     );
 }
