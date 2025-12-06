@@ -314,7 +314,12 @@ export default function Dashboard() {
                     </h2>
                 </div>
 
-                <DashboardChart type={viewMode} data={monthlyExpenses} />
+                <DashboardChart
+                    type={viewMode}
+                    data={monthlyExpenses}
+                    selectedMonth={selectedMonth}
+                    onMonthClick={() => alert('月份選擇器功能開發中...')}
+                />
 
                 <div style={{ textAlign: 'center', marginTop: '20px', color: '#C7CEEA', fontSize: '0.8rem' }}>
                     ← 滑動切換月份 →

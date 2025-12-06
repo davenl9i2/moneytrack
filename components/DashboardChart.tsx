@@ -25,9 +25,11 @@ ChartJS.register(
 type DashboardChartProps = {
     type: 'EXPENSE' | 'INCOME';
     data: any[]; // Expense objects
+    selectedMonth?: string; // Format: YYYY-MM
+    onMonthClick?: () => void;
 };
 
-export default function DashboardChart({ type, data }: DashboardChartProps) {
+export default function DashboardChart({ type, data, selectedMonth, onMonthClick }: DashboardChartProps) {
     // Filter data by type
     const filteredData = data.filter(d => (d.type || 'EXPENSE') === type);
     const totalAmount = filteredData.reduce((sum, item) => sum + item.amount, 0);
@@ -99,8 +101,37 @@ export default function DashboardChart({ type, data }: DashboardChartProps) {
     return (
         <div style={{ width: '100%' }}>
             {/* Chart */}
-            <div style={{ maxHeight: '220px', display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
+            <div style={{ maxHeight: '220px', display: 'flex', justifyContent: 'center', marginBottom: '20px', position: 'relative' }}>
                 <Doughnut data={chartData} options={options} />
+
+                {/* Center Text */}
+                {selectedMonth && (
+                    <div
+                        onClick={onMonthClick}
+                        style={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            textAlign: 'center',
+                            cursor: onMonthClick ? 'pointer' : 'default',
+                            pointerEvents: onMonthClick ? 'auto' : 'none',
+                            userSelect: 'none'
+                        }}
+                    >
+                        <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#5A4A42' }}>
+                            {selectedMonth.split('-')[0]}年
+                        </div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#5A4A42', marginTop: '-4px' }}>
+                            {parseInt(selectedMonth.split('-')[1])}月
+                        </div>
+                        {onMonthClick && (
+                            <div style={{ fontSize: '0.7rem', color: '#C7CEEA', marginTop: '4px' }}>
+                                點擊選擇
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Details List */}
