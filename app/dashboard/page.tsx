@@ -35,6 +35,7 @@ export default function Dashboard() {
         const now = new Date();
         return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     });
+    const [showMonthPicker, setShowMonthPicker] = useState(false);
 
     // LIFF State
     const [userId, setUserId] = useState<string>('');
@@ -183,7 +184,7 @@ export default function Dashboard() {
         .filter(e => (e.type || 'EXPENSE') === viewMode)
         .reduce((sum, e) => sum + e.amount, 0);
 
-    const filteredExpenses = expenses.filter(e => (e.type || 'EXPENSE') === viewMode);
+    const filteredExpenses = monthlyExpenses.filter(e => (e.type || 'EXPENSE') === viewMode);
 
     // Sort expenses based on sortBy
     const sortedExpenses = [...filteredExpenses].sort((a, b) => {
@@ -313,7 +314,7 @@ export default function Dashboard() {
                     type={viewMode}
                     data={monthlyExpenses}
                     selectedMonth={selectedMonth}
-                    onMonthClick={() => alert('月份選擇器功能開發中...')}
+                    onMonthClick={() => setShowMonthPicker(true)}
                 />
 
                 <div style={{ textAlign: 'center', marginTop: '20px', color: '#C7CEEA', fontSize: '0.8rem' }}>
@@ -485,6 +486,87 @@ export default function Dashboard() {
             >
                 +
             </button>
+
+            {/* Month Picker Modal */}
+            {showMonthPicker && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: 'rgba(0,0,0,0.5)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 2000
+                    }}
+                    onClick={() => setShowMonthPicker(false)}
+                >
+                    <div
+                        className="card fade-in"
+                        style={{
+                            width: '90%',
+                            maxWidth: '400px',
+                            maxHeight: '70vh',
+                            overflowY: 'auto',
+                            padding: '24px'
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h3 style={{ marginBottom: '20px', color: '#5A4A42' }}>選擇月份</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                            {Array.from({ length: 12 }, (_, i) => {
+                                const date = new Date();
+                                date.setMonth(date.getMonth() - i);
+                                const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                                const isSelected = monthStr === selectedMonth;
+
+                                return (
+                                    <div
+                                        key={monthStr}
+                                        onClick={() => {
+                                            setSelectedMonth(monthStr);
+                                            setShowMonthPicker(false);
+                                        }}
+                                        style={{
+                                            padding: '16px 12px',
+                                            borderRadius: '12px',
+                                            textAlign: 'center',
+                                            cursor: 'pointer',
+                                            background: isSelected ? '#FFB7B2' : '#F5F5F5',
+                                            color: isSelected ? 'white' : '#5A4A42',
+                                            fontWeight: isSelected ? 'bold' : 'normal',
+                                            transition: 'all 0.2s'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            if (!isSelected) e.currentTarget.style.background = '#E0E0E0';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            if (!isSelected) e.currentTarget.style.background = '#F5F5F5';
+                                        }}
+                                    >
+                                        <div style={{ fontSize: '0.8rem', marginBottom: '4px' }}>
+                                            {date.getFullYear()}年
+                                        </div>
+                                        <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
+                                            {date.getMonth() + 1}月
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <button
+                            onClick={() => setShowMonthPicker(false)}
+                            className="btn"
+                            style={{ width: '100%', marginTop: '20px', background: '#F0F0F0' }}
+                        >
+                            取消
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <ExpenseForm
                 key={editingExpense?.id || 'new'}
