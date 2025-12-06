@@ -77,6 +77,9 @@ export async function summarizeQueryResults(expenses: any[], queryType: string, 
   const totalIncome = expenses.filter(e => e.type === 'INCOME').reduce((sum, e) => sum + e.amount, 0);
   const balance = totalIncome - totalExpense;
 
+  // Use Taiwan time for explicit relative date comparison
+  const taiwanDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' });
+
   // Prepare data for LLM
   let dataContext = "";
 
@@ -110,10 +113,13 @@ export async function summarizeQueryResults(expenses: any[], queryType: string, 
     
     **Instructions:**
     1. **Time Context Awareness (CRITICAL)**: 
+       - **Current Date**: ${taiwanDate}
        - **Query Date Range**: ${startDate || 'Unspecified'} to ${endDate || 'Unspecified'}
-       - **Rule**: If the Query Date Range is a specific past date (e.g., "2023-12-05") which is NOT today's date, you MUST refer to it as "Yesterday" (昨天), "That day" (那天), or the specific date.
-       - **FORBIDDEN**: Do NOT start with "Today" (今天) or "This month" (這個月) if the user asked about a specific past date.
-       - Example: If range is yesterday, start with "昨天你花了..." (Yesterday you spent...).
+       - **Rule**: 
+         - IF (Query Start == Current Date): You MUST say "Today" (今天).
+         - IF (Query Start == Current Date - 1 day): You MUST say "Yesterday" (昨天).
+         - IF (Query Start != Current Date): refer to the specific date or period (e.g. "On 12/05...").
+       - **FORBIDDEN**: Do NOT say "Yesterday" if the user is asking about "Today". Do NOT say "Today" if asking about "Yesterday".
     
     2. **Conversational**: Tell a story about their spending/earning!
     3. **Financial Summary**:
