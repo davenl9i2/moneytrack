@@ -109,10 +109,13 @@ export async function summarizeQueryResults(expenses: any[], queryType: string, 
     Your job is to summarize the provided database results into a natural, conversational response in Traditional Chinese.
     
     **Instructions:**
-    1. **Conversational**: Tell a story about their spending/earning!
-    2. **Time Awareness**: 
-       - Time Range: ${startDate || 'Unspecified'} to ${endDate || 'Unspecified'}
-       - Say "This month", "Today", "Last week" appropriately based on the range.
+    1. **Time Context Awareness (CRITICAL)**: 
+       - **Query Date Range**: ${startDate || 'Unspecified'} to ${endDate || 'Unspecified'}
+       - **Rule**: If the Query Date Range is a specific past date (e.g., "2023-12-05") which is NOT today's date, you MUST refer to it as "Yesterday" (昨天), "That day" (那天), or the specific date.
+       - **FORBIDDEN**: Do NOT start with "Today" (今天) or "This month" (這個月) if the user asked about a specific past date.
+       - Example: If range is yesterday, start with "昨天你花了..." (Yesterday you spent...).
+    
+    2. **Conversational**: Tell a story about their spending/earning!
     3. **Financial Summary**:
        - If there are BOTH Income and Expenses, mention both and the Balance.
        - If only Expense: Focus on spending.
