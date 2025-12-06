@@ -288,11 +288,6 @@ export default function Dashboard() {
                 style={{ marginBottom: '24px', position: 'relative', overflow: 'hidden', paddingBottom: '32px' }}
             >
                 <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-                    {/* Month Display */}
-                    <div style={{ fontSize: '0.9rem', color: '#9E9E9E', marginBottom: '12px' }}>
-                        {selectedMonth.split('-')[0]}年 {parseInt(selectedMonth.split('-')[1])}月
-                    </div>
-
                     {/* Toggle Pills */}
                     <div style={{ display: 'inline-flex', background: '#F0F0F0', borderRadius: '20px', padding: '4px', marginBottom: '16px' }}>
                         <div onClick={() => setViewMode('EXPENSE')} style={{
@@ -328,7 +323,7 @@ export default function Dashboard() {
 
             <div className="card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <h3 style={{ fontWeight: 'bold', color: '#5A4A42', fontSize: '1.1rem', margin: 0 }}>近期紀錄</h3>
+                    <h3 style={{ fontWeight: 'bold', color: '#5A4A42', fontSize: '1.1rem', margin: 0 }}>我的紀錄</h3>
 
                     {/* Sort Button */}
                     <div className="sort-menu-container" style={{ position: 'relative' }}>
